@@ -1,4 +1,4 @@
-import type { PersonalRecord, WorkoutSet } from '../data/db'
+import type { PersonalRecord, Workout, WorkoutExercise, WorkoutSet } from '../data/db'
 
 export interface StrengthLog {
   exerciseId: string
@@ -36,6 +36,20 @@ export function derivePersonalRecords(logs: StrengthLog[]): PersonalRecord[] {
   return records
 }
 
+export function getCurrentPersonalRecords(records: PersonalRecord[]): PersonalRecord[] {
+  const bestByMetric = new Map<string, PersonalRecord>()
+  for (const record of records) {
+    if (record.deletedAt) continue
+    const metric = record.type === 'reps_at_weight' ? record.unit : record.type
+    const key = `${record.exerciseName.trim().toLocaleLowerCase()}|${metric}`
+    const current = bestByMetric.get(key)
+    if (!current || record.value > current.value || (record.value === current.value && record.achievedAt > current.achievedAt)) {
+      bestByMetric.set(key, record)
+    }
+  }
+  return [...bestByMetric.values()].sort((left, right) => right.achievedAt.localeCompare(left.achievedAt))
+}
+
 export interface ProgressionInput {
   prescribedWorkingSets: number
   completedWorkingSets: number
@@ -43,6 +57,43 @@ export interface ProgressionInput {
   actualReps: number[]
   painOrPoorForm: boolean
   incrementKg: number
+}
+
+export interface RecentStrengthLog {
+  exerciseName: string
+  workoutId: string
+  performedAt: string
+  prescribedWorkingSets: number
+  completedWorkingSets: number
+  actualReps: number[]
+}
+
+export function getRecentStrengthLogs(workouts: Workout[], exercises: WorkoutExercise[], sets: WorkoutSet[]): RecentStrengthLog[] {
+  const completedWorkouts = workouts
+    .filter((workout) => workout.status === 'completed' && !workout.deletedAt)
+    .sort((left, right) => (right.completedAt ?? '').localeCompare(left.completedAt ?? ''))
+  const latestByExercise = new Set<string>()
+  const logs: RecentStrengthLog[] = []
+
+  for (const workout of completedWorkouts) {
+    for (const exercise of exercises.filter((item) => item.workoutId === workout.id && item.section === 'weight')) {
+      const key = exercise.name.trim().toLocaleLowerCase()
+      if (!key || latestByExercise.has(key)) continue
+      const workingSets = sets.filter((set) => set.workoutExerciseId === exercise.id && set.weightKg != null)
+      if (!workingSets.length) continue
+      const completedSets = workingSets.filter((set) => set.completed && set.reps != null)
+      latestByExercise.add(key)
+      logs.push({
+        exerciseName: exercise.name,
+        workoutId: workout.id,
+        performedAt: workout.completedAt ?? workout.localDate,
+        prescribedWorkingSets: workingSets.length,
+        completedWorkingSets: completedSets.length,
+        actualReps: completedSets.map((set) => set.reps as number),
+      })
+    }
+  }
+  return logs
 }
 
 export function getProgressionSuggestion(input: ProgressionInput): { action: 'increase' | 'maintain' | 'insufficient'; reason: string } {

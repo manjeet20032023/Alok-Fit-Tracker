@@ -9,6 +9,8 @@ export interface Profile {
   distanceUnit: 'km' | 'mi'
   targetMinutes: number
   theme: 'light' | 'dark'
+  revision?: number
+  updatedAt?: string
 }
 
 export interface Workout {
@@ -16,6 +18,7 @@ export interface Workout {
   localDate: string
   timezone: string
   plannedFocus: string[]
+  location?: 'gym' | 'home' | 'other' | null
   status: 'in_progress' | 'paused' | 'completed' | 'abandoned'
   startedAt: string
   pausedAt: string | null
@@ -37,6 +40,8 @@ export interface WorkoutExercise {
   muscleGroup: string
   section: 'weight' | 'core'
   order: number
+  revision?: number
+  updatedAt?: string
 }
 
 export interface WorkoutSet {
@@ -49,6 +54,8 @@ export interface WorkoutSet {
   durationSeconds: number | null
   completed: boolean
   notes: string
+  revision?: number
+  updatedAt?: string
 }
 
 export interface CardioEntry {
@@ -61,6 +68,8 @@ export interface CardioEntry {
   heartRate: number | null
   calories: number | null
   notes: string
+  revision?: number
+  updatedAt?: string
 }
 
 export interface Exercise {

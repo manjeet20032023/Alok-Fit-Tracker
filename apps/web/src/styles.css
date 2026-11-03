@@ -129,3 +129,114 @@ h2 { font-size: 20px; }
   .timer { font-size: 36px; }
   .exercise-row { grid-template-columns: minmax(120px,1fr) 64px 64px 42px; }
 }
+
+:root {
+  color-scheme: light;
+  --ink: #17231d;
+  --muted: #69756e;
+  --line: #dce5dc;
+  --paper: #fffefa;
+  --green: #2e7154;
+  --green-dark: #20553e;
+  --lime: #d9eb7b;
+  font-family: "Aptos", "Segoe UI", sans-serif;
+  letter-spacing: 0;
+}
+
+html, body, #root { width: 100%; min-width: 320px; min-height: 100%; margin: 0; }
+#root { max-width: none; border: 0; text-align: left; display: block; }
+body { min-height: 100vh; background: linear-gradient(145deg, #f8faf5 0%, #edf2eb 100%); }
+h1, h2, h3 { font-family: "Aptos Display", "Trebuchet MS", sans-serif; letter-spacing: 0; }
+h1 { margin: 5px 0 0; font-size: 32px; }
+.app-shell { grid-template-columns: 190px minmax(0, 1fr); }
+.sidebar { padding: 18px 12px; overflow: hidden; }
+.nav-list { overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+.content { width: 100%; }
+.page-heading h1 { overflow-wrap: anywhere; }
+.panel { min-width: 0; }
+.workout-layout > *, .dashboard-grid > * { min-width: 0; }
+.exercise-panel-header { align-items: end; gap: 12px; flex-wrap: wrap; }
+.exercise-panel-header h2 { margin: 0; }
+.exercise-add { display: grid; grid-template-columns: minmax(170px, 1fr) auto; align-items: end; gap: 8px; }
+.exercise-picker { min-width: 190px; }
+.logged-exercise { padding: 14px 0; border-top: 1px solid var(--line); }
+.logged-exercise-title { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.logged-exercise-title .danger-button { min-height: 36px; margin-left: auto; padding-inline: 10px; font-size: 12px; }
+.past-workout-form { margin-bottom: 18px; }
+.past-workout-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.past-focus { grid-column: span 2; }
+.past-exercise-list { display: grid; gap: 10px; margin-top: 18px; }
+.past-exercise-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) repeat(3, minmax(72px, .55fr)) auto; align-items: end; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: #f9faf6; }
+.past-form-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; }
+.status-message { margin: 0 0 12px; color: var(--green-dark); }
+.bottom-nav a { color: var(--muted); text-decoration: none; }
+.bottom-nav a.active { color: var(--green); }
+.bottom-nav a:focus-visible, .nav-button:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #d27b54; outline-offset: 2px; }
+
+@media (max-width: 900px) {
+  .app-shell { display: block; }
+  .sidebar { display: none; }
+  .topbar { height: 60px; padding: 0 14px; }
+  .page-title { font-size: 17px; }
+  .content { padding: 18px 14px calc(88px + env(safe-area-inset-bottom)); }
+  .bottom-nav {
+    display: flex;
+    gap: 2px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    height: calc(66px + env(safe-area-inset-bottom));
+    padding: 6px 8px env(safe-area-inset-bottom);
+  }
+  .bottom-nav::-webkit-scrollbar { display: none; }
+  .bottom-nav a {
+    flex: 0 0 72px;
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 3px;
+    border-radius: 7px;
+    font-size: 10px;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+  .bottom-nav a.active { background: #eaf1e8; }
+  .dashboard-grid, .workout-layout { grid-template-columns: minmax(0, 1fr); }
+  .rest-panel { position: static; }
+  .exercise-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .exercise-row:has(> div:empty) { grid-template-columns: minmax(0, 1fr) minmax(76px, .7fr) 42px; }
+  .exercise-row:has(> div:empty) > div:empty { display: none; }
+  .past-workout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .past-focus { grid-column: span 2; }
+  .past-exercise-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .past-exercise-row .danger-button { min-height: 40px; }
+}
+
+@media (max-width: 540px) {
+  .content { padding-inline: 12px; }
+  .page-heading { align-items: center; gap: 10px; }
+  .page-heading h1 { font-size: 25px; line-height: 1.12; }
+  .page-heading > .danger-button { flex: 0 0 auto; padding-inline: 10px; font-size: 12px; }
+  .panel { padding: 14px; }
+  .plan-card { min-height: 210px; padding: 20px; }
+  .plan-card h2 { font-size: 23px; }
+  .stat-card { min-height: 100px; padding: 13px; }
+  .stat-card strong { font-size: 22px; margin-top: 10px; }
+  .section-tabs { gap: 5px; }
+  .section-tab { min-height: 44px; padding-inline: 5px; font-size: 12px; }
+  .timer-panel { min-height: 138px; padding: 16px; }
+  .timer { font-size: 34px; }
+  .exercise-add { width: 100%; grid-template-columns: minmax(0, 1fr) auto; }
+  .exercise-picker { min-width: 0; }
+  .exercise-add .primary-button { padding-inline: 10px; }
+  .table { min-width: 560px; }
+  .panel:has(> .table) { overflow-x: auto; }
+  .modal { padding: 18px; }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions button { width: 100%; }
+  .past-workout-grid { gap: 9px; }
+  .past-exercise-row { padding: 10px; gap: 8px; }
+  .past-form-actions { flex-direction: column; }
+  .past-form-actions button { width: 100%; }
+}

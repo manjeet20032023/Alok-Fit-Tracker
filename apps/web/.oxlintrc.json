@@ -4,8 +4,8 @@
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["off", { "allowConstantExport": true }],
-    "react/purity": "off",
-    "react/immutability": "off",
-    "react/set-state-in-effect": "off"
+    "react/purity": "warn",
+    "react/immutability": "warn",
+    "react/set-state-in-effect": "warn"
   }
 }

@@ -10,7 +10,17 @@ function download(filename: string, content: string, type: string) {
   URL.revokeObjectURL(url)
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not encode photo data'))
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read photo data'))
+    reader.readAsDataURL(blob)
+  })
+}
+
 export async function exportJSON() {
+  const photos = await db.progressPhotos.toArray()
   const snapshot = {
     exportedAt: new Date().toISOString(),
     profiles: await db.profiles.toArray(),
@@ -21,6 +31,8 @@ export async function exportJSON() {
     exercises: await db.exercises.toArray(),
     measurements: await db.measurements.toArray(),
     goals: await db.goals.toArray(),
+    personalRecords: await db.personalRecords.toArray(),
+    progressPhotos: await Promise.all(photos.map(async ({ blob, ...photo }) => ({ ...photo, dataUrl: await blobToDataUrl(blob) }))),
   }
   download(`alok-fit-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(snapshot, null, 2), 'application/json')
 }

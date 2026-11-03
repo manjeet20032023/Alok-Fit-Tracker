@@ -16,9 +16,9 @@ npm run preview
 
 ## Persistence and cloud setup
 
-IndexedDB is managed by Dexie. The active workout, measurements, goals, custom exercises, photos, and sync outbox are stored locally. Apply the SQL migration from `supabase/migrations` before cloud sync.
+IndexedDB is managed by Dexie. Workouts, entries, measurements, goals, custom exercises, photos, personal records, and the sync outbox are stored locally. Apply the SQL migrations in order before cloud sync. When signed in, photo blobs upload to the private Supabase bucket and are downloaded on another signed-in device.
 
-Create `apps/web/.env.local` from the root `.env.example`. Use only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`; never add a service-role key to this frontend.
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the repository-root `.env` file for local development. Use only these public frontend values; never add a service-role key to the frontend.
 
 
 ## Additional Oxlint configuration
