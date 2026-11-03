@@ -131,6 +131,21 @@ create table if not exists public.goals (
   deleted_at timestamptz
 );
 
+create table if not exists public.personal_records (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  exercise_name text not null,
+  type text not null check (type in ('weight','reps_at_weight','estimated_1rm','duration','distance')),
+  value numeric not null,
+  unit text not null,
+  workout_id uuid references public.workouts(id) on delete set null,
+  achieved_at timestamptz not null,
+  revision integer not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
 create table if not exists public.progress_photos (
   id uuid primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -155,6 +170,25 @@ alter table public.cardio_entries enable row level security;
 alter table public.measurements enable row level security;
 alter table public.goals enable row level security;
 alter table public.progress_photos enable row level security;
+alter table public.personal_records enable row level security;
+
+drop policy if exists "profiles_owner" on public.profiles;
+drop policy if exists "workouts_owner" on public.workouts;
+drop policy if exists "exercises_owner_or_seed" on public.exercises;
+drop policy if exists "exercises_owner_write" on public.exercises;
+drop policy if exists "exercises_owner_update" on public.exercises;
+drop policy if exists "exercises_owner_delete" on public.exercises;
+drop policy if exists "workout_exercises_owner" on public.workout_exercises;
+drop policy if exists "workout_sets_owner" on public.workout_sets;
+drop policy if exists "cardio_owner" on public.cardio_entries;
+drop policy if exists "measurements_owner" on public.measurements;
+drop policy if exists "goals_owner" on public.goals;
+drop policy if exists "photos_owner" on public.progress_photos;
+drop policy if exists "personal_records_owner" on public.personal_records;
+
+drop policy if exists "progress_photos_owner_select" on storage.objects;
+drop policy if exists "progress_photos_owner_insert" on storage.objects;
+drop policy if exists "progress_photos_owner_delete" on storage.objects;
 
 create policy "profiles_owner" on public.profiles for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "workouts_owner" on public.workouts for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -168,6 +202,7 @@ create policy "cardio_owner" on public.cardio_entries for all using (auth.uid() 
 create policy "measurements_owner" on public.measurements for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "goals_owner" on public.goals for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "photos_owner" on public.progress_photos for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "personal_records_owner" on public.personal_records for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 insert into storage.buckets (id, name, public) values ('progress-photos', 'progress-photos', false)
 on conflict (id) do update set public = false;
@@ -175,3 +210,10 @@ on conflict (id) do update set public = false;
 create policy "progress_photos_owner_select" on storage.objects for select using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "progress_photos_owner_insert" on storage.objects for insert with check (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "progress_photos_owner_delete" on storage.objects for delete using (bucket_id = 'progress-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create index if not exists workout_exercises_workout_idx on public.workout_exercises(workout_id, sort_order);
+create index if not exists workout_sets_workout_idx on public.workout_sets(workout_id, workout_exercise_id);
+create index if not exists cardio_workout_idx on public.cardio_entries(workout_id);
+create index if not exists measurements_user_date_idx on public.measurements(user_id, measured_at desc);
+create index if not exists goals_user_status_idx on public.goals(user_id, status);
+create index if not exists personal_records_user_exercise_idx on public.personal_records(user_id, exercise_name, achieved_at desc);

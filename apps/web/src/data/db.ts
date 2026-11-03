@@ -109,7 +109,23 @@ export interface ProgressPhoto {
   note: string
   blob: Blob
   contentType: string
+  storageKey?: string | null
+  fileSizeBytes?: number
+  updatedAt?: string
   createdAt: string
+  deletedAt: string | null
+}
+
+export interface PersonalRecord {
+  id: string
+  exerciseName: string
+  type: 'weight' | 'reps_at_weight' | 'estimated_1rm' | 'duration' | 'distance'
+  value: number
+  unit: string
+  workoutId: string | null
+  achievedAt: string
+  createdAt: string
+  updatedAt: string
   deletedAt: string | null
 }
 
@@ -121,7 +137,7 @@ export interface SyncOutboxItem {
   payload: string
   revision: number
   attempts: number
-  status: 'pending' | 'syncing' | 'failed'
+  status: 'pending' | 'syncing' | 'failed' | 'conflict'
   createdAt: string
   updatedAt: string
 }
@@ -137,6 +153,7 @@ class AlokFitDatabase extends Dexie {
   goals!: EntityTable<Goal, 'id'>
   progressPhotos!: EntityTable<ProgressPhoto, 'id'>
   syncOutbox!: EntityTable<SyncOutboxItem, 'id'>
+  personalRecords!: EntityTable<PersonalRecord, 'id'>
 
   constructor() {
     super('AlokFitTracker')
@@ -158,6 +175,7 @@ class AlokFitDatabase extends Dexie {
       goals: 'id, status, startDate, updatedAt, deletedAt',
       progressPhotos: 'id, category, capturedAt, deletedAt',
       syncOutbox: 'id, entityType, entityId, status, updatedAt',
+      personalRecords: 'id, exerciseName, type, achievedAt, updatedAt, deletedAt',
     })
   }
 }

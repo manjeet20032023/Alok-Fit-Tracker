@@ -2,7 +2,7 @@ import { db, type SyncOutboxItem } from './db'
 import { supabase } from './supabase'
 
 export interface SyncResult {
-  status: 'synced' | 'offline' | 'unconfigured' | 'error' | 'unauthenticated'
+  status: 'synced' | 'offline' | 'unconfigured' | 'error' | 'unauthenticated' | 'conflict'
   synced: number
 }
 
@@ -35,7 +35,7 @@ export async function syncNow(): Promise<SyncResult> {
         const workout = payload as { localDate: string; timezone: string; plannedFocus: string[]; status: string; startedAt: string; pausedAt: string | null; lastResumedAt: string | null; totalPausedSeconds: number; completedAt: string | null; durationSeconds: number | null; notes: string; revision: number; createdAt: string; updatedAt: string; deletedAt: string | null }
         const remote = await supabase.from('workouts').select('revision').eq('id', item.entityId).maybeSingle()
         if (remote.data && Number(remote.data.revision) > item.revision) {
-          await db.syncOutbox.update(item.id, { status: 'failed', updatedAt: new Date().toISOString() })
+          await db.syncOutbox.update(item.id, { status: 'conflict', updatedAt: new Date().toISOString() })
           continue
         }
         const result = await supabase.from('workouts').upsert({
@@ -63,6 +63,14 @@ export async function syncNow(): Promise<SyncResult> {
         const set = payload as { workoutId: string; workoutExerciseId: string; setNumber: number; reps: number|null; weightKg: number|null; durationSeconds: number|null; completed: boolean; notes: string }
         const result = await supabase.from('workout_sets').upsert({ id: item.entityId, user_id: userId, workout_id: set.workoutId, workout_exercise_id: set.workoutExerciseId, set_number: set.setNumber, reps: set.reps, weight_kg: set.weightKg, duration_seconds: set.durationSeconds, completed: set.completed, notes: set.notes, revision: item.revision })
         if (result.error) throw result.error
+      } else if (item.entityType === 'personalRecords') {
+        const record = payload as { exerciseName: string; type: string; value: number; unit: string; workoutId: string|null; achievedAt: string; createdAt: string; updatedAt: string; deletedAt: string|null }
+        const result = await supabase.from('personal_records').upsert({ id: item.entityId, user_id: userId, exercise_name: record.exerciseName, type: record.type, value: record.value, unit: record.unit, workout_id: record.workoutId, achieved_at: record.achievedAt, revision: item.revision, created_at: record.createdAt, updated_at: record.updatedAt, deleted_at: record.deletedAt })
+        if (result.error) throw result.error
+      } else if (item.entityType === 'progressPhotos') {
+        const photo = payload as { category: string; capturedAt: string; note: string; storageKey: string; contentType: string; fileSizeBytes: number; createdAt: string; updatedAt: string; deletedAt: string|null }
+        const result = await supabase.from('progress_photos').upsert({ id: item.entityId, user_id: userId, category: photo.category, captured_at: photo.capturedAt, note: photo.note, storage_key: photo.storageKey, content_type: photo.contentType, file_size_bytes: photo.fileSizeBytes, revision: item.revision, created_at: photo.createdAt, updated_at: photo.updatedAt, deleted_at: photo.deletedAt })
+        if (result.error) throw result.error
       } else if (item.entityType === 'measurements') {
         const measurement = payload as { type: string; value: number; unit: string; measuredAt: string; note: string; createdAt: string; updatedAt: string; deletedAt: string | null }
         const result = await supabase.from('measurements').upsert({ id: item.entityId, user_id: userId, type: measurement.type, value: measurement.value, unit: measurement.unit, measured_at: measurement.measuredAt, note: measurement.note, revision: item.revision, created_at: measurement.createdAt, updated_at: measurement.updatedAt, deleted_at: measurement.deletedAt })
@@ -82,5 +90,6 @@ export async function syncNow(): Promise<SyncResult> {
       await db.syncOutbox.update(item.id, { status: 'failed', updatedAt: new Date().toISOString() })
     }
   }
-  return { status: 'synced', synced }
+  const conflicts = await db.syncOutbox.where('status').equals('conflict').count()
+  return conflicts ? { status: 'conflict', synced } : { status: 'synced', synced }
 }
