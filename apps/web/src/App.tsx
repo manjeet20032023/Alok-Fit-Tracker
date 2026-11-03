@@ -8,6 +8,8 @@ import { enqueue, resolveWorkoutConflict, syncNow } from './data/sync'
 import { exportCSV, exportJSON } from './data/export'
 import { restoreBackup, validateBackup } from './data/import'
 import { derivePersonalRecords, getCurrentPersonalRecords, getProgressionSuggestion, getRecentStrengthLogs } from './domain/progression'
+import { validatePastWorkoutExercise, type PastWorkoutExerciseDraft } from './domain/pastWorkout'
+import { filterExercises, getExerciseBodyPartTags, getExerciseCatalog, type ExerciseOption } from './domain/exerciseCatalog'
 import './styles.css'
 
 const navItems = [
@@ -26,23 +28,7 @@ const navItems = [
 
 const currentTime = () => new Date()
 const currentTimestamp = () => currentTime().toISOString()
-const workoutExerciseCatalog = [
-  { name: 'Bench Press', muscleGroup: 'Chest', section: 'weight' },
-  { name: 'Incline Dumbbell Press', muscleGroup: 'Chest', section: 'weight' },
-  { name: 'Lat Pulldown', muscleGroup: 'Back', section: 'weight' },
-  { name: 'Barbell Row', muscleGroup: 'Back', section: 'weight' },
-  { name: 'Cable Row', muscleGroup: 'Back', section: 'weight' },
-  { name: 'Back Squat', muscleGroup: 'Legs', section: 'weight' },
-  { name: 'Romanian Deadlift', muscleGroup: 'Legs', section: 'weight' },
-  { name: 'Overhead Press', muscleGroup: 'Shoulders', section: 'weight' },
-  { name: 'Triceps Pushdown', muscleGroup: 'Triceps', section: 'weight' },
-  { name: 'Cable Curl', muscleGroup: 'Biceps', section: 'weight' },
-  { name: 'Plank', muscleGroup: 'Core', section: 'core' },
-  { name: 'Hanging Leg Raise', muscleGroup: 'Core', section: 'core' },
-] as const
-
-type PastExerciseDraft = { id: string; name: string; muscleGroup: string; setCount: string; reps: string; weightKg: string }
-const initialPastExercise: PastExerciseDraft = { id: 'initial', name: '', muscleGroup: '', setCount: '3', reps: '10', weightKg: '0' }
+const initialPastExercise: PastWorkoutExerciseDraft = { id: 'initial', category: 'weight', name: '', muscleGroup: '', setCount: '3', reps: '10', weightKg: '0', durationSeconds: '', durationMinutes: '', distanceKm: '', speedKph: '', inclinePercent: '' }
 
 function App() {
   return <BrowserRouter><Shell /></BrowserRouter>
@@ -58,9 +44,12 @@ function Dashboard() {
   const [today] = useState(() => currentTime())
   const [active, setActive] = useState<Workout | null>(null)
   const [completed, setCompleted] = useState<Workout[]>([])
+  const [savedPlanDays, setSavedPlanDays] = useState<{ day: string; focus: string[] }[]>([])
   const weekday = today.toLocaleDateString('en-US', { weekday: 'long' })
-  const dayPlan = weeklySplit.find((item) => item.day === weekday) ?? weeklySplit[0]
-  useEffect(() => { void (async () => { setActive(await db.workouts.where('status').anyOf(['in_progress', 'paused']).first() ?? null); setCompleted((await db.workouts.where('status').equals('completed').reverse().sortBy('completedAt')).slice(0, 5)) })() }, [])
+  const defaultPlan = weeklySplit.find((item) => item.day === weekday) ?? weeklySplit[0]
+  const savedFocus = savedPlanDays.find((item) => item.day === weekday)?.focus
+  const dayPlan = { day: weekday, focus: savedFocus?.length ? savedFocus : savedFocus ? ['Rest'] : defaultPlan.focus }
+  useEffect(() => { void (async () => { const [activeWorkout, completedWorkouts, planDays] = await Promise.all([db.workouts.where('status').anyOf(['in_progress', 'paused']).first(), db.workouts.where('status').equals('completed').reverse().sortBy('completedAt'), db.planDays.toArray()]); startTransition(() => { setActive(activeWorkout ?? null); setCompleted(completedWorkouts.slice(0, 5)); setSavedPlanDays(planDays) }) })() }, [])
   return <div className="content"><div className="page-heading"><div><div className="eyebrow">{today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div><h1>Good morning, Alok</h1></div></div><div className="dashboard-grid"><section className="plan-card"><div><div className="eyebrow" style={{ color: '#d7ef6d' }}>Today's focus</div><h2>{dayPlan.focus.join(' + ')}</h2><p>{dayPlan.focus.includes('Rest') ? 'Recovery day. Rest, mobility and a routine of your choice.' : `Single gym session • Cardio • Abs & Core • ${dayPlan.focus.join(' + ')}`}</p></div>{active ? <button className="primary-button" onClick={() => navigate('/workout')}><Play size={17} />Resume workout</button> : dayPlan.focus.includes('Rest') ? <button className="secondary-button" onClick={() => navigate('/plan')}>View weekly plan</button> : <button className="primary-button" onClick={() => navigate('/workout')}><Plus size={17} />Start workout</button>}</section><div className="stat-grid"><StatCard label="This week" value={`${completed.length}`} suffix="sessions" /><StatCard label="Target" value="120-150" suffix="minutes" /><StatCard label="Storage" value="Local" suffix="offline ready" /><StatCard label="Last session" value={completed[0]?.durationSeconds ? formatElapsed(completed[0].durationSeconds) : '--:--:--'} suffix="duration" /></div></div><div className="section-row"><section className="section-card"><strong>Cardio</strong><p>Every gym day • 1 combined session</p></section><section className="section-card"><strong>Abs & Core</strong><p>Logged inside today's workout</p></section><section className="section-card"><strong>Weight training</strong><p>{dayPlan.focus.join(' + ')}</p></section></div><section className="panel" style={{ marginTop: 18 }}><div className="panel-header"><h2>Recent workouts</h2><button className="secondary-button" onClick={() => navigate('/history')}>View all</button></div>{completed.length === 0 ? <div className="empty-state">No completed workouts yet. Your first session will appear here.</div> : <table className="table"><thead><tr><th>Date</th><th>Focus</th><th>Duration</th></tr></thead><tbody>{completed.map((workout) => <tr key={workout.id}><td>{workout.localDate}</td><td>{workout.plannedFocus.join(' + ')}</td><td>{workout.durationSeconds ? formatElapsed(workout.durationSeconds) : '--'}</td></tr>)}</tbody></table>}</section></div>
 }
 
@@ -73,6 +62,9 @@ function WorkoutLogger() {
   const [exercises, setExercises] = useState<WorkoutExercise[]>([])
   const [sets, setSets] = useState<WorkoutSet[]>([])
   const [cardio, setCardio] = useState<CardioEntry[]>([])
+  const [libraryExercises, setLibraryExercises] = useState<Exercise[]>([])
+  const [bodyPartFilter, setBodyPartFilter] = useState('All')
+  const [selectedCardioName, setSelectedCardioName] = useState('Treadmill running')
   const [selectedExerciseName, setSelectedExerciseName] = useState('')
   const [finishOpen, setFinishOpen] = useState(false)
   const [restSeconds, setRestSeconds] = useState(90)
@@ -81,11 +73,12 @@ function WorkoutLogger() {
   async function load() { const active = await db.workouts.where('status').anyOf(['in_progress', 'paused']).first(); if (active) await open(active) }
   async function open(value: Workout) { setWorkout(value); await refresh(value.id) }
   async function refresh(workoutId: string) { setExercises(await db.workoutExercises.where('workoutId').equals(workoutId).sortBy('order')); setSets(await db.workoutSets.where('workoutId').equals(workoutId).toArray()); setCardio(await db.cardioEntries.where('workoutId').equals(workoutId).toArray()) }
+  useEffect(() => { void db.exercises.toArray().then((items) => startTransition(() => setLibraryExercises(items))) }, [])
   useEffect(() => { void load(); const clock = window.setInterval(() => setNow(currentTime()), 1000); return () => window.clearInterval(clock) }, [])
-  async function start() { const date = currentTime(); const weekday = date.toLocaleDateString('en-US', { weekday: 'long' }); const focus = weeklySplit.find((item) => item.day === weekday)?.focus ?? ['Training']; if (focus.includes('Rest')) return; const value: Workout = { id: createId(), localDate: localDate(date), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, plannedFocus: focus, status: 'in_progress', startedAt: date.toISOString(), pausedAt: null, lastResumedAt: date.toISOString(), totalPausedSeconds: 0, completedAt: null, durationSeconds: null, notes: '', createdAt: date.toISOString(), updatedAt: date.toISOString(), revision: 1, deletedAt: null }; await db.workouts.add(value); await enqueue('workouts', value.id, value, value.revision); await open(value) }
+  async function start() { const date = currentTime(); const weekday = date.toLocaleDateString('en-US', { weekday: 'long' }); const focus = (await db.planDays.get(weekday))?.focus ?? weeklySplit.find((item) => item.day === weekday)?.focus ?? ['Training']; if (!focus.length || focus.includes('Rest')) return; const value: Workout = { id: createId(), localDate: localDate(date), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, plannedFocus: focus, status: 'in_progress', startedAt: date.toISOString(), pausedAt: null, lastResumedAt: date.toISOString(), totalPausedSeconds: 0, completedAt: null, durationSeconds: null, notes: '', createdAt: date.toISOString(), updatedAt: date.toISOString(), revision: 1, deletedAt: null }; await db.workouts.add(value); await enqueue('workouts', value.id, value, value.revision); await open(value) }
   async function pauseResume() { if (!workout) return; const date = currentTime(); let next: Workout; if (workout.status === 'in_progress') next = { ...workout, status: 'paused', pausedAt: date.toISOString(), updatedAt: date.toISOString(), revision: workout.revision + 1 }; else { const pausedAt = Date.parse(workout.pausedAt ?? date.toISOString()); const added = Math.max(0, Math.floor((date.getTime() - pausedAt) / 1000)); next = { ...workout, status: 'in_progress', pausedAt: null, lastResumedAt: date.toISOString(), totalPausedSeconds: workout.totalPausedSeconds + added, updatedAt: date.toISOString(), revision: workout.revision + 1 } } await db.workouts.put(next); await enqueue('workouts', next.id, next, next.revision); setWorkout(next); setNow(date) }
   async function finish() { if (!workout) return; const finished = currentTime(); let totalPausedSeconds = workout.totalPausedSeconds; if (workout.status === 'paused' && workout.pausedAt) totalPausedSeconds += Math.max(0, Math.floor((finished.getTime() - Date.parse(workout.pausedAt)) / 1000)); const durationSeconds = calculateElapsedSeconds({ ...workout, status: 'completed', totalPausedSeconds, completedAt: finished.toISOString() }, finished); const next: Workout = { ...workout, status: 'completed', pausedAt: null, totalPausedSeconds, completedAt: finished.toISOString(), durationSeconds, updatedAt: finished.toISOString(), revision: workout.revision + 1 }; await db.workouts.put(next); await enqueue('workouts', next.id, next, next.revision); const strengthLogs = exercises.filter((exercise) => exercise.section === 'weight').map((exercise) => ({ exerciseId: exercise.id, exerciseName: exercise.name, workoutId: workout.id, achievedAt: finished.toISOString(), sets: sets.filter((set) => set.workoutExerciseId === exercise.id) })); const records = derivePersonalRecords(strengthLogs); if (records.length) { await db.personalRecords.bulkPut(records); for (const record of records) await enqueue('personalRecords', record.id, record, 1) } setWorkout(null); setFinishOpen(false) }
-  async function addExercise(exerciseSection: 'weight' | 'core', name: string, muscle: string) { if (!workout || exercises.some((item) => item.section === exerciseSection && item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return; const exercise: WorkoutExercise = { id: createId(), workoutId: workout.id, name, muscleGroup: muscle, section: exerciseSection, order: exercises.filter((item) => item.section === exerciseSection).length }; await db.workoutExercises.add(exercise); await enqueue('workoutExercises', exercise.id, exercise, 1); const set: WorkoutSet = { id: createId(), workoutExerciseId: exercise.id, workoutId: workout.id, setNumber: 1, reps: exerciseSection === 'core' ? null : 10, weightKg: exerciseSection === 'core' ? null : 0, durationSeconds: exerciseSection === 'core' ? 30 : null, completed: false, notes: '' }; await db.workoutSets.add(set); await enqueue('workoutSets', set.id, set, 1); await refresh(workout.id) }
+  async function addExercise(exerciseSection: 'weight' | 'core' | 'cardio', name: string, muscle: string) { if (!workout || exerciseSection === 'cardio' || exercises.some((item) => item.section === exerciseSection && item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return; const exercise: WorkoutExercise = { id: createId(), workoutId: workout.id, name, muscleGroup: muscle, section: exerciseSection, order: exercises.filter((item) => item.section === exerciseSection).length }; await db.workoutExercises.add(exercise); await enqueue('workoutExercises', exercise.id, exercise, 1); const set: WorkoutSet = { id: createId(), workoutExerciseId: exercise.id, workoutId: workout.id, setNumber: 1, reps: exerciseSection === 'core' ? null : 10, weightKg: exerciseSection === 'core' ? null : 0, durationSeconds: exerciseSection === 'core' ? 30 : null, completed: false, notes: '' }; await db.workoutSets.add(set); await enqueue('workoutSets', set.id, set, 1); await refresh(workout.id) }
   async function removeExercise(exercise: WorkoutExercise) {
     if (!workout || !window.confirm(`Remove ${exercise.name} and its sets from this workout?`)) return
     const exerciseSets = await db.workoutSets.where('workoutExerciseId').equals(exercise.id).toArray()
@@ -99,16 +92,20 @@ function WorkoutLogger() {
   }
   async function updateSet(set: WorkoutSet, patch: Partial<WorkoutSet>) { const next = { ...set, ...patch }; await db.workoutSets.put(next); await enqueue('workoutSets', next.id, next, 1); if (workout) await refresh(workout.id) }
   async function addSet(exerciseId: string) { if (!workout) return; const count = sets.filter((set) => set.workoutExerciseId === exerciseId).length; const next: WorkoutSet = { id: createId(), workoutExerciseId: exerciseId, workoutId: workout.id, setNumber: count + 1, reps: 10, weightKg: 0, durationSeconds: null, completed: false, notes: '' }; await db.workoutSets.add(next); await enqueue('workoutSets', next.id, next, 1); await refresh(workout.id) }
-  async function addCardio() { if (!workout) return; const entry: CardioEntry = { id: createId(), workoutId: workout.id, activityType: 'Treadmill running', durationSeconds: 0, distanceMeters: null, inclinePercent: null, heartRate: null, calories: null, notes: '' }; await db.cardioEntries.add(entry); await enqueue('cardioEntries', entry.id, entry, 1); await refresh(workout.id) }
+  async function addCardio() { if (!workout) return; const entry: CardioEntry = { id: createId(), workoutId: workout.id, activityType: selectedCardioName, durationSeconds: 0, distanceMeters: null, speedKph: null, inclinePercent: null, heartRate: null, calories: null, notes: '' }; await db.cardioEntries.add(entry); await enqueue('cardioEntries', entry.id, entry, 1); await refresh(workout.id) }
   async function updateCardio(entry: CardioEntry, patch: Partial<CardioEntry>) { const next = { ...entry, ...patch }; await db.cardioEntries.put(next); await enqueue('cardioEntries', next.id, next, 1); if (workout) await refresh(workout.id) }
 
   if (!workout) return <div className="content"><div className="page-heading"><div><div className="eyebrow">Live session</div><h1>Workout logger</h1></div></div><section className="panel"><div className="empty-state"><Dumbbell size={28} /><p>No active workout.</p><button className="primary-button" onClick={start}>Start today's workout</button></div></section></div>
   const elapsed = calculateElapsedSeconds(workout, now)
   const visible = exercises.filter((item) => item.section === (section === 'core' ? 'core' : 'weight'))
-  const availableExercises = workoutExerciseCatalog.filter((item) => item.section === (section === 'core' ? 'core' : 'weight'))
+  const exerciseCatalog = getExerciseCatalog(libraryExercises)
+  const catalogSection = section === 'cardio' ? 'cardio' : section === 'core' ? 'core' : 'weight'
+  const availableBodyParts = getExerciseBodyPartTags(exerciseCatalog, catalogSection)
+  const availableExercises = filterExercises(exerciseCatalog, catalogSection, bodyPartFilter)
+  const availableCardioActivities = filterExercises(exerciseCatalog, 'cardio', bodyPartFilter)
   const preferredExerciseName = section === 'core' ? 'Plank' : workout.plannedFocus.includes('Back') ? 'Lat Pulldown' : workout.plannedFocus.includes('Legs') ? 'Back Squat' : 'Bench Press'
   const selectedExercise = availableExercises.find((item) => item.name === selectedExerciseName) ?? availableExercises.find((item) => item.name === preferredExerciseName)
-  return <div className="content"><div className="page-heading"><div><div className="eyebrow">{workout.localDate}</div><h1>{workout.plannedFocus.join(' + ')}</h1></div><button className="danger-button" onClick={() => setFinishOpen(true)}>Finish workout</button></div><div className="workout-layout"><div><section className="timer-panel"><div><div className="eyebrow" style={{ color: '#d7ef6d' }}>{workout.status === 'paused' ? 'Workout paused' : 'Workout in progress'}</div><div className="timer">{formatElapsed(elapsed)}</div></div><button className="secondary-button" onClick={pauseResume}>{workout.status === 'paused' ? <Play size={16} /> : <Pause size={16} />}{workout.status === 'paused' ? 'Resume workout' : 'Pause workout'}</button></section><div className="section-tabs" style={{ marginTop: 14 }}><button className={`section-tab ${section === 'cardio' ? 'active' : ''}`} onClick={() => setSection('cardio')}>Cardio</button><button className={`section-tab ${section === 'core' ? 'active' : ''}`} onClick={() => setSection('core')}>Abs & Core</button><button className={`section-tab ${section === 'weight' ? 'active' : ''}`} onClick={() => setSection('weight')}>Weight training</button></div><section className="panel">{section === 'cardio' ? <><div className="panel-header"><h2>Cardio</h2><button className="secondary-button" onClick={addCardio}><Plus size={16} />Add cardio</button></div>{cardio.length === 0 ? <div className="empty-state">Add treadmill, walking, running, cycling or elliptical.</div> : cardio.map((entry) => <div className="exercise-row" key={entry.id}><div className="field"><label>Activity</label><select value={entry.activityType} onChange={(event) => void updateCardio(entry, { activityType: event.target.value })}><option>Treadmill running</option><option>Treadmill walking</option><option>Incline walking</option><option>Outdoor running</option><option>Cycling</option><option>Elliptical</option><option>Other</option></select></div><div className="field"><label>Minutes</label><input type="number" min="0" value={entry.durationSeconds ? Math.round(entry.durationSeconds / 60) : ''} onChange={(event) => void updateCardio(entry, { durationSeconds: Number(event.target.value || 0) * 60 })} /></div><div className="field"><label>Distance km</label><input type="number" min="0" step="0.01" value={entry.distanceMeters ? Math.round(entry.distanceMeters / 10) / 100 : ''} onChange={(event) => void updateCardio(entry, { distanceMeters: Number(event.target.value || 0) * 1000 })} /></div><div className="field"><label>Incline %</label><input type="number" value={entry.inclinePercent ?? ''} onChange={(event) => void updateCardio(entry, { inclinePercent: event.target.value === '' ? null : Number(event.target.value) })} /></div></div>)}</> : <><div className="panel-header exercise-panel-header"><h2>{section === 'core' ? 'Abs & Core' : workout.plannedFocus.join(' + ')}</h2><div className="exercise-add"><label className="field"><span>Exercise</span><select value={selectedExercise?.name ?? ''} onChange={(event) => setSelectedExerciseName(event.target.value)}>{availableExercises.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></label><button className="primary-button" disabled={!selectedExercise || visible.some((item) => item.name === selectedExercise.name)} onClick={() => selectedExercise && void addExercise(selectedExercise.section, selectedExercise.name, selectedExercise.muscleGroup)}><Plus size={16} />Add exercise</button></div></div>{visible.length === 0 ? <div className="empty-state">No {section === 'core' ? 'core' : 'weight'} exercises added yet.</div> : visible.map((exercise) => <article className="logged-exercise" key={exercise.id}><div className="logged-exercise-title"><strong>{exercise.name}</strong> <span className="badge">{exercise.muscleGroup}</span><button className="danger-button" onClick={() => void removeExercise(exercise)}>Remove exercise</button></div>{sets.filter((set) => set.workoutExerciseId === exercise.id).map((set) => <div className="exercise-row" key={set.id}><div className="field"><label>Set {set.setNumber}</label><input aria-label={`${exercise.name} set ${set.setNumber} reps`} type="number" min="0" value={set.reps ?? ''} onChange={(event) => void updateSet(set, { reps: event.target.value === '' ? null : Number(event.target.value) })} /></div><div className="field"><label>{exercise.section === 'core' ? 'Seconds' : 'Weight kg'}</label><input type="number" min="0" step="0.5" value={exercise.section === 'core' ? set.durationSeconds ?? '' : set.weightKg ?? ''} onChange={(event) => void updateSet(set, exercise.section === 'core' ? { durationSeconds: event.target.value === '' ? null : Number(event.target.value) } : { weightKg: event.target.value === '' ? null : Number(event.target.value) })} /></div><div /><button aria-label={`Mark set ${set.setNumber} complete`} className={`check-button ${set.completed ? 'done' : ''}`} onClick={() => void updateSet(set, { completed: !set.completed })}>{set.completed ? <Check size={17} /> : null}</button></div>)}<button className="secondary-button" onClick={() => void addSet(exercise.id)}><Plus size={15} />Add set</button></article>)}</>}</section></div><aside className="rest-panel"><h3>Rest timer</h3><div className="rest-display">{formatElapsed(restSeconds).slice(3)}</div><div className="preset-grid">{[30,60,90,120,180].map((seconds) => <button key={seconds} onClick={() => { setRestSeconds(seconds); setRestRunning(false) }}>{seconds}s</button>)}</div><button className="primary-button" style={{ width: '100%' }} onClick={() => setRestRunning((running) => !running)}>{restRunning ? <Pause size={16} /> : <Play size={16} />}{restRunning ? 'Pause' : 'Start timer'}</button><button className="secondary-button" style={{ width: '100%', marginTop: 8 }} onClick={() => { setRestRunning(false); setRestSeconds(90) }}>Reset</button><p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>Rest between sets counts toward workout duration.</p></aside></div>{finishOpen && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true"><h2>Finish workout?</h2><p>This saves the session duration and moves it to history. Workout entries remain editable later.</p><div className="modal-actions"><button className="secondary-button" onClick={() => setFinishOpen(false)}>Continue workout</button><button className="primary-button" onClick={finish}>Confirm finish</button></div></div></div>}</div>
+  return <div className="content"><div className="page-heading"><div><div className="eyebrow">{workout.localDate}</div><h1>{workout.plannedFocus.join(' + ')}</h1></div><button className="danger-button" onClick={() => setFinishOpen(true)}>Finish workout</button></div><div className="workout-layout"><div><section className="timer-panel"><div><div className="eyebrow" style={{ color: '#d7ef6d' }}>{workout.status === 'paused' ? 'Workout paused' : 'Workout in progress'}</div><div className="timer">{formatElapsed(elapsed)}</div></div><button className="secondary-button" onClick={pauseResume}>{workout.status === 'paused' ? <Play size={16} /> : <Pause size={16} />}{workout.status === 'paused' ? 'Resume workout' : 'Pause workout'}</button></section><div className="workout-filters" style={{ marginTop: 14 }}><label className="field"><span>Category</span><select value={section} onChange={(event) => { setSection(event.target.value as 'cardio' | 'core' | 'weight'); setBodyPartFilter('All') }}><option value="weight">Strength</option><option value="core">Abs & Core</option><option value="cardio">Cardio</option></select></label><label className="field"><span>Body part</span><select value={bodyPartFilter} onChange={(event) => setBodyPartFilter(event.target.value)}><option>All</option>{availableBodyParts.map((tag) => <option key={tag}>{tag}</option>)}</select></label></div><section className="panel">{section === 'cardio' ? <><div className="panel-header"><h2>Cardio</h2><div className="exercise-add"><label className="field"><span>Activity</span><select value={selectedCardioName} onChange={(event) => setSelectedCardioName(event.target.value)}>{availableCardioActivities.map((item) => <option key={item.name} value={item.name}>{item.name} · {item.muscleGroup}</option>)}</select></label><button className="secondary-button" onClick={addCardio}><Plus size={16} />Add cardio</button></div></div>{cardio.length === 0 ? <div className="empty-state">Add a cardio activity when you have logged one.</div> : cardio.map((entry) => <div className="exercise-row cardio-entry-row" key={entry.id}><div className="field"><label>Activity</label><select value={entry.activityType} onChange={(event) => void updateCardio(entry, { activityType: event.target.value })}>{availableCardioActivities.map((item) => <option key={item.name} value={item.name}>{item.name} · {item.muscleGroup}</option>)}</select></div><div className="field"><label>Minutes</label><input type="number" min="0" value={entry.durationSeconds ? Math.round(entry.durationSeconds / 60) : ''} onChange={(event) => void updateCardio(entry, { durationSeconds: Number(event.target.value || 0) * 60 })} /></div><div className="field"><label>Speed km/h</label><input type="number" min="0" step="0.1" value={entry.speedKph ?? ''} onChange={(event) => void updateCardio(entry, { speedKph: event.target.value === '' ? null : Number(event.target.value) })} /></div><div className="field"><label>Distance km</label><input type="number" min="0" step="0.01" value={entry.distanceMeters ? Math.round(entry.distanceMeters / 10) / 100 : ''} onChange={(event) => void updateCardio(entry, { distanceMeters: event.target.value === '' ? null : Number(event.target.value) * 1000 })} /></div><div className="field"><label>Incline %</label><input type="number" min="0" step="0.5" value={entry.inclinePercent ?? ''} onChange={(event) => void updateCardio(entry, { inclinePercent: event.target.value === '' ? null : Number(event.target.value) })} /></div></div>)}</> : <><div className="panel-header exercise-panel-header"><h2>{section === 'core' ? 'Abs & Core' : workout.plannedFocus.join(' + ')}</h2><div className="exercise-add"><label className="field"><span>Exercise</span><select value={selectedExercise?.name ?? ''} onChange={(event) => setSelectedExerciseName(event.target.value)}><option value="">Choose exercise</option>{availableExercises.map((item) => <option key={item.name} value={item.name}>{item.name} · {item.muscleGroup}</option>)}</select></label><button className="primary-button" disabled={!selectedExercise || visible.some((item) => item.name === selectedExercise.name)} onClick={() => selectedExercise && void addExercise(selectedExercise.section, selectedExercise.name, selectedExercise.muscleGroup)}><Plus size={16} />Add exercise</button></div></div>{visible.length === 0 ? <div className="empty-state">No {section === 'core' ? 'core' : 'weight'} exercises added yet.</div> : visible.map((exercise) => <article className="logged-exercise" key={exercise.id}><div className="logged-exercise-title"><strong>{exercise.name}</strong> <span className="badge">{exercise.muscleGroup}</span><button className="danger-button" onClick={() => void removeExercise(exercise)}>Remove exercise</button></div>{sets.filter((set) => set.workoutExerciseId === exercise.id).map((set) => <div className="exercise-row" key={set.id}><div className="field"><label>Set {set.setNumber}</label><input aria-label={`${exercise.name} set ${set.setNumber} reps`} type="number" min="0" value={set.reps ?? ''} onChange={(event) => void updateSet(set, { reps: event.target.value === '' ? null : Number(event.target.value) })} /></div><div className="field"><label>{exercise.section === 'core' ? 'Seconds' : 'Weight kg'}</label><input type="number" min="0" step="0.5" value={exercise.section === 'core' ? set.durationSeconds ?? '' : set.weightKg ?? ''} onChange={(event) => void updateSet(set, exercise.section === 'core' ? { durationSeconds: event.target.value === '' ? null : Number(event.target.value) } : { weightKg: event.target.value === '' ? null : Number(event.target.value) })} /></div><div /><button aria-label={`Mark set ${set.setNumber} complete`} className={`check-button ${set.completed ? 'done' : ''}`} onClick={() => void updateSet(set, { completed: !set.completed })}>{set.completed ? <Check size={17} /> : null}</button></div>)}<button className="secondary-button" onClick={() => void addSet(exercise.id)}><Plus size={15} />Add set</button></article>)}</>}</section></div><aside className="rest-panel"><h3>Rest timer</h3><div className="rest-display">{formatElapsed(restSeconds).slice(3)}</div><div className="preset-grid">{[30,60,90,120,180].map((seconds) => <button key={seconds} onClick={() => { setRestSeconds(seconds); setRestRunning(false) }}>{seconds}s</button>)}</div><button className="primary-button" style={{ width: '100%' }} onClick={() => setRestRunning((running) => !running)}>{restRunning ? <Pause size={16} /> : <Play size={16} />}{restRunning ? 'Pause' : 'Start timer'}</button><button className="secondary-button" style={{ width: '100%', marginTop: 8 }} onClick={() => { setRestRunning(false); setRestSeconds(90) }}>Reset</button><p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>Rest between sets counts toward workout duration.</p></aside></div>{finishOpen && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true"><h2>Finish workout?</h2><p>This saves the session duration and moves it to history. Workout entries remain editable later.</p><div className="modal-actions"><button className="secondary-button" onClick={() => setFinishOpen(false)}>Continue workout</button><button className="primary-button" onClick={finish}>Confirm finish</button></div></div></div>}</div>
 }
 
 function HistoryPage() {
@@ -120,17 +117,20 @@ function HistoryPage() {
   const [pastStartTime, setPastStartTime] = useState('18:00')
   const [pastEndTime, setPastEndTime] = useState('19:00')
   const [pastLocation, setPastLocation] = useState<NonNullable<Workout['location']>>('gym')
-  const [pastFocus, setPastFocus] = useState('Strength training')
-  const [pastExercises, setPastExercises] = useState<PastExerciseDraft[]>([initialPastExercise])
+  const [libraryExercises, setLibraryExercises] = useState<Exercise[]>([])
+  const [pastExercises, setPastExercises] = useState<PastWorkoutExerciseDraft[]>([initialPastExercise])
+  const [pastBodyPartFilters, setPastBodyPartFilters] = useState<Record<string, string>>({})
   const [pastMessage, setPastMessage] = useState('')
   async function load() {
-    const [workouts, conflicts] = await Promise.all([
+    const [workouts, conflicts, libraryExercises] = await Promise.all([
       db.workouts.where('status').equals('completed').reverse().sortBy('completedAt'),
       db.syncOutbox.where('status').equals('conflict').toArray(),
+      db.exercises.toArray(),
     ])
     startTransition(() => {
       setWorkouts(workouts.filter((workout) => !workout.deletedAt))
       setConflicts(conflicts)
+      setLibraryExercises(libraryExercises.filter((item) => !item.deletedAt))
     })
   }
   useEffect(() => { void load() }, [])
@@ -176,20 +176,22 @@ function HistoryPage() {
     await enqueue('workouts', next.id, next, next.revision, 'delete')
     await load()
   }
-  function updatePastExercise(id: string, patch: Partial<PastExerciseDraft>) {
+  function updatePastExercise(id: string, patch: Partial<PastWorkoutExerciseDraft>) {
     setPastExercises((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item))
   }
   async function savePastWorkout() {
     const start = new Date(`${pastDate}T${pastStartTime}:00`)
     const end = new Date(`${pastDate}T${pastEndTime}:00`)
-    const focus = pastFocus.split(',').map((item) => item.trim()).filter(Boolean)
     const drafts = pastExercises.filter((item) => item.name.trim())
+    const inferredFocus = [...new Set(drafts.map((item) => item.category === 'cardio' ? 'Cardio' : item.category === 'core' ? 'Abs & Core' : 'Strength training'))]
+    const focus = inferredFocus
     if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
       setPastMessage('Enter a valid date and an end time after the start time.')
       return
     }
-    if (!focus.length || !drafts.length || drafts.some((item) => !item.muscleGroup.trim() || !Number.isInteger(Number(item.setCount)) || Number(item.setCount) < 1 || !Number.isInteger(Number(item.reps)) || Number(item.reps) < 0 || !Number.isFinite(Number(item.weightKg)) || Number(item.weightKg) < 0)) {
-      setPastMessage('Add at least one exercise and enter a muscle group, set count, reps, and non-negative weight for each.')
+    const validationMessage = drafts.map(validatePastWorkoutExercise).find(Boolean)
+    if (!focus.length || !drafts.length || validationMessage) {
+      setPastMessage(validationMessage ?? 'Add a workout focus and at least one exercise or activity.')
       return
     }
 
@@ -201,22 +203,32 @@ function HistoryPage() {
       durationSeconds: Math.floor((end.getTime() - start.getTime()) / 1000), notes: 'Logged after training',
       createdAt: now, updatedAt: now, revision: 1, deletedAt: null,
     }
-    const exercises: WorkoutExercise[] = drafts.map((draft, order) => ({
-      id: createId(), workoutId: workout.id, name: draft.name.trim(), muscleGroup: draft.muscleGroup.trim(), section: 'weight', order,
+    const trainingDrafts = drafts.filter((draft) => draft.category !== 'cardio')
+    const exercises: WorkoutExercise[] = trainingDrafts.map((draft, order) => ({
+      id: createId(), workoutId: workout.id, name: draft.name.trim(), muscleGroup: draft.muscleGroup.trim(), section: draft.category === 'core' ? 'core' : 'weight', order,
     }))
-    const sets: WorkoutSet[] = drafts.flatMap((draft, index) => Array.from({ length: Number(draft.setCount) }, (_, setIndex) => ({
+    const sets: WorkoutSet[] = trainingDrafts.flatMap((draft, index) => Array.from({ length: Number(draft.setCount) }, (_, setIndex) => ({
       id: createId(), workoutExerciseId: exercises[index].id, workoutId: workout.id, setNumber: setIndex + 1,
-      reps: Number(draft.reps), weightKg: Number(draft.weightKg), durationSeconds: null, completed: true, notes: '',
+      reps: draft.reps === '' ? null : Number(draft.reps), weightKg: draft.category === 'weight' ? Number(draft.weightKg) : null,
+      durationSeconds: draft.category === 'core' && draft.durationSeconds !== '' ? Number(draft.durationSeconds) : null, completed: true, notes: '',
     })))
-    await db.transaction('rw', [db.workouts, db.workoutExercises, db.workoutSets], async () => {
+    const cardioEntries: CardioEntry[] = drafts.filter((draft) => draft.category === 'cardio').map((draft) => ({
+      id: createId(), workoutId: workout.id, activityType: draft.name.trim(), durationSeconds: Number(draft.durationMinutes) * 60,
+      distanceMeters: draft.distanceKm === '' ? null : Number(draft.distanceKm) * 1000,
+      speedKph: draft.speedKph === '' ? null : Number(draft.speedKph),
+      inclinePercent: draft.inclinePercent === '' ? null : Number(draft.inclinePercent), heartRate: null, calories: null, notes: '',
+    }))
+    await db.transaction('rw', [db.workouts, db.workoutExercises, db.workoutSets, db.cardioEntries], async () => {
       await db.workouts.add(workout)
-      await db.workoutExercises.bulkAdd(exercises)
-      await db.workoutSets.bulkAdd(sets)
+      if (exercises.length) await db.workoutExercises.bulkAdd(exercises)
+      if (sets.length) await db.workoutSets.bulkAdd(sets)
+      if (cardioEntries.length) await db.cardioEntries.bulkAdd(cardioEntries)
     })
     await enqueue('workouts', workout.id, workout, workout.revision)
     for (const exercise of exercises) await enqueue('workoutExercises', exercise.id, exercise, 1)
     for (const set of sets) await enqueue('workoutSets', set.id, set, 1)
-    const records = derivePersonalRecords(exercises.map((exercise) => ({
+    for (const entry of cardioEntries) await enqueue('cardioEntries', entry.id, entry, 1)
+    const records = derivePersonalRecords(exercises.filter((exercise) => exercise.section === 'weight').map((exercise) => ({
       exerciseId: exercise.id, exerciseName: exercise.name, workoutId: workout.id, achievedAt: workout.completedAt!,
       sets: sets.filter((set) => set.workoutExerciseId === exercise.id),
     })))
@@ -230,6 +242,7 @@ function HistoryPage() {
     setPastExercises([initialPastExercise])
     await load()
   }
+  const pastExerciseOptions = getExerciseCatalog(libraryExercises)
   return <div className="content">
     <div className="page-heading"><div><div className="eyebrow">Training log</div><h1>Workout history</h1></div><button className="primary-button" onClick={() => setPastEntryOpen((open) => !open)}>{pastEntryOpen ? 'Close form' : 'Log past workout'}</button></div>
     {pastMessage && <p className="status-message" role="status">{pastMessage}</p>}
@@ -240,14 +253,21 @@ function HistoryPage() {
         <div className="field"><label htmlFor="past-location">Location</label><select id="past-location" value={pastLocation} onChange={(event) => setPastLocation(event.target.value as NonNullable<Workout['location']>)}><option value="gym">Gym</option><option value="home">Home</option><option value="other">Other</option></select></div>
         <div className="field"><label htmlFor="past-start">From</label><input id="past-start" type="time" value={pastStartTime} onChange={(event) => setPastStartTime(event.target.value)} /></div>
         <div className="field"><label htmlFor="past-end">To</label><input id="past-end" type="time" value={pastEndTime} onChange={(event) => setPastEndTime(event.target.value)} /></div>
-        <div className="field past-focus"><label htmlFor="past-focus">Workout focus</label><input id="past-focus" value={pastFocus} onChange={(event) => setPastFocus(event.target.value)} placeholder="Back, Biceps" /></div>
       </div>
-      <div className="past-exercise-list">{pastExercises.map((item) => <div className="past-exercise-row" key={item.id}>
-        <div className="field"><label>Exercise</label><input value={item.name} onChange={(event) => updatePastExercise(item.id, { name: event.target.value })} placeholder="e.g. Lat Pulldown" /></div>
-        <div className="field"><label>Muscle group</label><input value={item.muscleGroup} onChange={(event) => updatePastExercise(item.id, { muscleGroup: event.target.value })} placeholder="Back" /></div>
-        <div className="field"><label>Sets</label><input type="number" min="1" step="1" value={item.setCount} onChange={(event) => updatePastExercise(item.id, { setCount: event.target.value })} /></div>
-        <div className="field"><label>Reps</label><input type="number" min="0" step="1" value={item.reps} onChange={(event) => updatePastExercise(item.id, { reps: event.target.value })} /></div>
-        <div className="field"><label>Weight kg</label><input type="number" min="0" step="0.5" value={item.weightKg} onChange={(event) => updatePastExercise(item.id, { weightKg: event.target.value })} /></div>
+      <div className="past-exercise-list">{pastExercises.map((item) => <div className={`past-exercise-row past-${item.category}-row`} key={item.id}>
+        <label className="field"><span>Category</span><select value={item.category} onChange={(event) => { const category = event.target.value as PastWorkoutExerciseDraft['category']; updatePastExercise(item.id, { category, name: '', muscleGroup: '' }); setPastBodyPartFilters((current) => ({ ...current, [item.id]: 'All' })) }}><option value="weight">Strength</option><option value="core">Abs & Core</option><option value="cardio">Cardio</option></select></label>
+        <label className="field"><span>Body part</span><select value={pastBodyPartFilters[item.id] ?? 'All'} onChange={(event) => setPastBodyPartFilters((current) => ({ ...current, [item.id]: event.target.value }))}><option>All</option>{getExerciseBodyPartTags(pastExerciseOptions, item.category).map((tag) => <option key={tag}>{tag}</option>)}</select></label>
+        <label className="field"><span>Exercise</span><select value={item.name} onChange={(event) => { const selected = filterExercises(pastExerciseOptions, item.category, pastBodyPartFilters[item.id] ?? 'All').find((option) => option.name === event.target.value); if (selected) updatePastExercise(item.id, { name: selected.name, muscleGroup: selected.muscleGroup }) }}><option value="">Choose from library</option>{filterExercises(pastExerciseOptions, item.category, pastBodyPartFilters[item.id] ?? 'All').map((option) => <option key={`${option.section}:${option.name}`} value={option.name}>{option.name}</option>)}</select></label>
+        {item.category === 'cardio' ? <>
+          <div className="field"><label>Minutes</label><input type="number" min="1" step="1" value={item.durationMinutes} onChange={(event) => updatePastExercise(item.id, { durationMinutes: event.target.value })} /></div>
+          <div className="field"><label>Speed km/h (optional)</label><input type="number" min="0" step="0.1" value={item.speedKph} onChange={(event) => updatePastExercise(item.id, { speedKph: event.target.value })} /></div>
+          <div className="field"><label>Distance km (optional)</label><input type="number" min="0" step="0.1" value={item.distanceKm} onChange={(event) => updatePastExercise(item.id, { distanceKm: event.target.value })} /></div>
+          <div className="field"><label>Incline % (optional)</label><input type="number" min="0" step="0.5" value={item.inclinePercent} onChange={(event) => updatePastExercise(item.id, { inclinePercent: event.target.value })} /></div>
+        </> : <>
+          <div className="field"><label>Sets</label><input type="number" min="1" step="1" value={item.setCount} onChange={(event) => updatePastExercise(item.id, { setCount: event.target.value })} /></div>
+          <div className="field"><label>Reps{item.category === 'core' ? ' (optional)' : ''}</label><input type="number" min="0" step="1" value={item.reps} onChange={(event) => updatePastExercise(item.id, { reps: event.target.value })} /></div>
+          {item.category === 'weight' ? <div className="field"><label>Weight kg</label><input type="number" min="0" step="0.5" value={item.weightKg} onChange={(event) => updatePastExercise(item.id, { weightKg: event.target.value })} /></div> : <div className="field"><label>Seconds per set (optional)</label><input type="number" min="0" step="1" value={item.durationSeconds} onChange={(event) => updatePastExercise(item.id, { durationSeconds: event.target.value })} /></div>}
+        </>}
         <button className="danger-button" aria-label={`Remove ${item.name || 'exercise row'}`} onClick={() => setPastExercises((current) => current.filter((entry) => entry.id !== item.id))}>Remove</button>
       </div>)}</div>
       <div className="past-form-actions"><button className="secondary-button" onClick={() => setPastExercises((current) => [...current, { ...initialPastExercise, id: createId() }])}><Plus size={16} />Add exercise</button><button className="primary-button" onClick={() => void savePastWorkout()}>Save workout</button></div>
@@ -260,27 +280,88 @@ function HistoryPage() {
 function LibraryPage() {
   const [search, setSearch] = useState('')
   const [customName, setCustomName] = useState('')
+  const [customMuscleGroup, setCustomMuscleGroup] = useState('Chest')
   const [custom, setCustom] = useState<Exercise[]>([])
   async function load() {
-    const records = (await db.exercises.toArray()).filter((item) => !item.deletedAt)
+    const records = await db.exercises.toArray()
     startTransition(() => setCustom(records))
   }
   useEffect(() => { void load() }, [])
   async function addExercise() {
     if (!customName.trim()) return
     const now = currentTimestamp()
-    const item: Exercise = { id: createId(), name: customName.trim(), muscleGroups: [], equipment: '', exerciseType: 'strength', instructions: '', isCustom: true, createdAt: now, updatedAt: now, deletedAt: null }
+    const exerciseType: Exercise['exerciseType'] = customMuscleGroup === 'Cardio' ? 'cardio' : customMuscleGroup === 'Core' ? 'core' : 'strength'
+    const item: Exercise = { id: createId(), name: customName.trim(), muscleGroups: [customMuscleGroup], equipment: '', exerciseType, instructions: '', isCustom: true, createdAt: now, updatedAt: now, deletedAt: null }
     await db.exercises.add(item)
     await enqueue('exercises', item.id, item, 1)
     setCustomName('')
     await load()
   }
-  const starter = ['Bench Press', 'Incline Dumbbell Press', 'Lat Pulldown', 'Barbell Row', 'Back Squat', 'Romanian Deadlift', 'Overhead Press', 'Triceps Pushdown', 'Cable Curl', 'Plank', 'Hanging Leg Raise']
-  const items = [...starter, ...custom.map((item) => item.name)].filter((item, index, list) => list.indexOf(item) === index && item.toLowerCase().includes(search.toLowerCase()))
-  return <div className="content"><div className="page-heading"><div><div className="eyebrow">Movement database</div><h1>Exercise library</h1></div></div><section className="panel"><div className="exercise-row"><div className="field"><label htmlFor="exercise-search">Search exercises</label><input id="exercise-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name" /></div><div className="field"><label>Custom exercise</label><input value={customName} onChange={(event) => setCustomName(event.target.value)} placeholder="Exercise name" /></div><button className="primary-button" onClick={addExercise}><Plus size={16} />Add</button></div><div className="library-grid" style={{ marginTop: 16 }}>{items.map((item) => <article className="exercise-card" key={item}><h3>{item}</h3><p>Gym exercise</p><span className="badge">{custom.some((entry) => entry.name === item) ? 'Custom' : 'Starter library'}</span></article>)}</div></section></div>
+  async function editExercise(option: ExerciseOption) {
+    const name = window.prompt('Exercise name', option.name)
+    if (name == null || !name.trim()) return
+    const muscleGroup = window.prompt('Body part tag', option.muscleGroup)
+    if (muscleGroup == null || !muscleGroup.trim()) return
+    const existing = custom.find((item) => item.catalogKey === option.catalogKey && option.catalogKey)
+      ?? custom.find((item) => item.id === option.exerciseId)
+    const now = currentTimestamp()
+    const group = muscleGroup.trim()
+    const item: Exercise = {
+      id: existing?.id ?? createId(), catalogKey: option.catalogKey, name: name.trim(), muscleGroups: group.split(',').map((tag) => tag.trim()).filter(Boolean),
+      equipment: existing?.equipment ?? '', exerciseType: group.toLowerCase() === 'cardio' ? 'cardio' : group.toLowerCase() === 'core' ? 'core' : 'strength',
+      instructions: existing?.instructions ?? '', isCustom: existing?.isCustom ?? false, createdAt: existing?.createdAt ?? now, updatedAt: now, deletedAt: null,
+    }
+    await db.exercises.put(item)
+    await enqueue('exercises', item.id, item, 1)
+    await load()
+  }
+  async function deleteExercise(option: ExerciseOption) {
+    if (!window.confirm(`Delete ${option.name} from the exercise library?`)) return
+    const existing = custom.find((item) => Boolean(option.catalogKey) && item.catalogKey === option.catalogKey)
+      ?? custom.find((item) => item.id === option.exerciseId)
+    const now = currentTimestamp()
+    const deleted: Exercise = existing
+      ? { ...existing, deletedAt: now, updatedAt: now }
+      : {
+          id: createId(), catalogKey: option.catalogKey, name: option.name, muscleGroups: option.muscleGroup.split(',').map((tag) => tag.trim()),
+          equipment: '', exerciseType: option.section === 'core' ? 'core' : option.section === 'cardio' ? 'cardio' : 'strength',
+          instructions: '', isCustom: false, createdAt: now, updatedAt: now, deletedAt: now,
+        }
+    await db.exercises.put(deleted)
+    await enqueue('exercises', deleted.id, deleted, 1)
+    await load()
+  }
+  const items = getExerciseCatalog(custom).filter((item) => `${item.name} ${item.muscleGroup}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
+  return <div className="content"><div className="page-heading"><div><div className="eyebrow">Movement database</div><h1>Exercise library</h1></div></div><section className="panel"><div className="exercise-row"><div className="field"><label htmlFor="exercise-search">Search exercises</label><input id="exercise-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or body part" /></div><div className="field"><label htmlFor="custom-exercise">Add library exercise</label><input id="custom-exercise" value={customName} onChange={(event) => setCustomName(event.target.value)} placeholder="Exercise or activity" /></div><div className="field"><label htmlFor="custom-muscle">Body part</label><select id="custom-muscle" value={customMuscleGroup} onChange={(event) => setCustomMuscleGroup(event.target.value)}>{['Chest', 'Back', 'Legs', 'Shoulders', 'Biceps', 'Triceps', 'Core', 'Cardio', 'Other'].map((group) => <option key={group}>{group}</option>)}</select></div><button className="primary-button" onClick={addExercise}><Plus size={16} />Add</button></div><div className="library-grid" style={{ marginTop: 16 }}>{items.map((item) => <article className="exercise-card" key={item.catalogKey ?? item.exerciseId ?? `${item.section}:${item.name}`}><div className="exercise-library-title"><h3>{item.name}</h3><div className="exercise-library-actions"><button className="secondary-button" onClick={() => void editExercise(item)}>Edit</button><button className="danger-button" onClick={() => void deleteExercise(item)}>Delete</button></div></div><p>{item.section === 'weight' ? 'Strength' : item.section === 'core' ? 'Abs & Core' : 'Cardio'}</p><span className="badge">{item.muscleGroup}</span></article>)}</div></section></div>
 }
 
-function PlanPage() { return <div className="content"><div className="page-heading"><div><div className="eyebrow">Training structure</div><h1>Weekly plan</h1></div></div><section className="panel"><table className="table"><thead><tr><th>Day</th><th>Main weight training</th><th>Included</th></tr></thead><tbody>{weeklySplit.map((item) => <tr key={item.day}><td><strong>{item.day}</strong></td><td>{item.focus.join(' + ')}</td><td>{item.focus.includes('Rest') ? 'Recovery' : 'Cardio + Abs/Core + weights'}</td></tr>)}</tbody></table></section></div> }
+function PlanPage() {
+  const [days, setDays] = useState(weeklySplit.map((item) => ({ id: item.day, day: item.day, focus: [...item.focus], updatedAt: '' })))
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    void db.planDays.toArray().then((saved) => {
+      const byDay = new Map(saved.map((item) => [item.day, item]))
+      const merged = weeklySplit.map((item) => byDay.get(item.day) ?? { id: item.day, day: item.day, focus: [...item.focus], updatedAt: '' })
+      startTransition(() => setDays(merged))
+    })
+  }, [])
+
+  function updateFocus(day: string, value: string) {
+    const focus = value.split(',').map((item) => item.trim()).filter(Boolean)
+    setDays((current) => current.map((item) => item.day === day ? { ...item, focus } : item))
+  }
+
+  async function savePlan() {
+    const now = currentTimestamp()
+    const updated = days.map((item) => ({ ...item, updatedAt: now }))
+    await db.planDays.bulkPut(updated)
+    setDays(updated)
+    setMessage('Weekly plan saved on this device.')
+  }
+
+  return <div className="content"><div className="page-heading"><div><div className="eyebrow">Training structure</div><h1>Weekly plan</h1></div><button className="primary-button" onClick={() => void savePlan()}>Save plan</button></div>{message && <p className="status-message" role="status">{message}</p>}<section className="panel"><div className="plan-editor-grid">{days.map((item) => <article className="plan-day-row" key={item.day}><h2>{item.day}</h2><label className="field"><span>Training focus</span><input value={item.focus.join(', ')} onChange={(event) => updateFocus(item.day, event.target.value)} placeholder="Leave empty for a rest day" /></label><small>{item.focus.length ? 'Cardio and core can be logged separately.' : 'Recovery day'}</small></article>)}</div></section></div>
+}
 
 function PhotosPage() {
   const [photos, setPhotos] = useState<ProgressPhoto[]>([])

@@ -36,7 +36,7 @@ A Supabase secret/server key may not be placed in Vite frontend environment vari
 ## Supabase setup
 
 1. Create or open the project in the Supabase dashboard.
-2. Run the migrations in order: `202611030001_alok_fit_tracker.sql`, `202611030002_alok_fit_tracker_hardening.sql`, then `202611030003_workout_location.sql`.
+2. Run the migrations in order: `202611030001_alok_fit_tracker.sql`, `202611030002_alok_fit_tracker_hardening.sql`, `202611030003_workout_location.sql`, `202611030004_cardio_speed.sql`, then `202611030005_exercise_catalog_keys.sql`.
 3. Enable Email authentication if desired.
 4. Put the project URL and publishable key in the repository-root `.env` file. Vite loads this ignored local file for development and builds.
 5. Restart Vite.

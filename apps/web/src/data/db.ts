@@ -64,6 +64,7 @@ export interface CardioEntry {
   activityType: string
   durationSeconds: number
   distanceMeters: number | null
+  speedKph?: number | null
   inclinePercent: number | null
   heartRate: number | null
   calories: number | null
@@ -74,6 +75,7 @@ export interface CardioEntry {
 
 export interface Exercise {
   id: string
+  catalogKey?: string
   name: string
   muscleGroups: string[]
   equipment: string
@@ -83,6 +85,13 @@ export interface Exercise {
   createdAt: string
   updatedAt: string
   deletedAt: string | null
+}
+
+export interface TrainingPlanDay {
+  id: string
+  day: string
+  focus: string[]
+  updatedAt: string
 }
 
 export interface Measurement {
@@ -158,6 +167,7 @@ class AlokFitDatabase extends Dexie {
   workoutSets!: EntityTable<WorkoutSet, 'id'>
   cardioEntries!: EntityTable<CardioEntry, 'id'>
   exercises!: EntityTable<Exercise, 'id'>
+  planDays!: EntityTable<TrainingPlanDay, 'id'>
   measurements!: EntityTable<Measurement, 'id'>
   goals!: EntityTable<Goal, 'id'>
   progressPhotos!: EntityTable<ProgressPhoto, 'id'>
@@ -185,6 +195,20 @@ class AlokFitDatabase extends Dexie {
       progressPhotos: 'id, category, capturedAt, deletedAt',
       syncOutbox: 'id, entityType, entityId, status, updatedAt',
       personalRecords: 'id, exerciseName, type, achievedAt, updatedAt, deletedAt',
+    })
+    this.version(3).stores({
+      profiles: 'id',
+      workouts: 'id, localDate, status, startedAt, updatedAt',
+      workoutExercises: 'id, workoutId, section, order',
+      workoutSets: 'id, workoutExerciseId, workoutId',
+      cardioEntries: 'id, workoutId, activityType',
+      exercises: 'id, name, exerciseType, updatedAt, deletedAt, catalogKey',
+      measurements: 'id, type, measuredAt, updatedAt, deletedAt',
+      goals: 'id, status, startDate, updatedAt, deletedAt',
+      progressPhotos: 'id, category, capturedAt, deletedAt',
+      syncOutbox: 'id, entityType, entityId, status, updatedAt',
+      personalRecords: 'id, exerciseName, type, achievedAt, updatedAt, deletedAt',
+      planDays: 'id, day',
     })
   }
 }

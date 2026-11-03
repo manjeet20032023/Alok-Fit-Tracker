@@ -19,6 +19,7 @@ const snapshotSchema = z.object({
   exercises: entityArray,
   measurements: entityArray,
   goals: entityArray,
+  planDays: entityArray,
   personalRecords: entityArray,
   progressPhotos: photoArray,
 })
@@ -46,7 +47,7 @@ export async function restoreBackup(text: string) {
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
     return { ...photo, contentType, blob: new Blob([bytes], { type: contentType }) }
   })
-  const tables = [db.profiles, db.workouts, db.workoutExercises, db.workoutSets, db.cardioEntries, db.exercises, db.measurements, db.goals, db.personalRecords, db.progressPhotos]
+  const tables = [db.profiles, db.workouts, db.workoutExercises, db.workoutSets, db.cardioEntries, db.exercises, db.measurements, db.goals, db.planDays, db.personalRecords, db.progressPhotos]
   await db.transaction('rw', tables, async () => {
     await db.profiles.bulkPut(data.profiles as never[])
     await db.workouts.bulkPut(data.workouts as never[])
@@ -56,6 +57,7 @@ export async function restoreBackup(text: string) {
     await db.exercises.bulkPut(data.exercises as never[])
     await db.measurements.bulkPut(data.measurements as never[])
     await db.goals.bulkPut(data.goals as never[])
+    await db.planDays.bulkPut(data.planDays as never[])
     await db.personalRecords.bulkPut(data.personalRecords as never[])
     await db.progressPhotos.bulkPut(photos as never[])
   })

@@ -23,6 +23,10 @@ function shouldApplyRemote(pending: SyncOutboxItem[], entityType: string, entity
   return Number.isFinite(remoteTime) && (!Number.isFinite(localTime) || remoteTime > localTime)
 }
 
+export function shouldApplyRemoteTombstone(pending: SyncOutboxItem[], entityType: string, entityId: string) {
+  return !pending.some((item) => item.entityType === entityType && item.entityId === entityId)
+}
+
 async function pullRemoteData(userId: string) {
   if (!supabase) return
   const pending = await db.syncOutbox.toArray()
@@ -31,6 +35,9 @@ async function pullRemoteData(userId: string) {
   if (profileResult.error) throw profileResult.error
   if (profileResult.data) {
     const remote = profileResult.data
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'profiles', 'default')) await db.profiles.delete('default')
+    } else {
     const local = await db.profiles.get('default')
     if (shouldApplyRemote(pending, 'profiles', 'default', remote.updated_at, local?.updatedAt)) {
       await db.profiles.put({
@@ -39,11 +46,16 @@ async function pullRemoteData(userId: string) {
         theme: remote.theme, revision: remote.revision, updatedAt: remote.updated_at,
       })
     }
+    }
   }
 
   const workoutResult = await supabase.from('workouts').select('*').eq('user_id', userId)
   if (workoutResult.error) throw workoutResult.error
   for (const remote of workoutResult.data ?? []) {
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'workouts', remote.id)) await db.workouts.delete(remote.id)
+      continue
+    }
     const local = await db.workouts.get(remote.id)
     if (!shouldApplyRemote(pending, 'workouts', remote.id, remote.updated_at, local?.updatedAt)) continue
     const workout: Workout = {
@@ -58,10 +70,14 @@ async function pullRemoteData(userId: string) {
   const exerciseResult = await supabase.from('exercises').select('*').eq('user_id', userId)
   if (exerciseResult.error) throw exerciseResult.error
   for (const remote of exerciseResult.data ?? []) {
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'exercises', remote.id)) await db.exercises.delete(remote.id)
+      continue
+    }
     const local = await db.exercises.get(remote.id)
     if (!shouldApplyRemote(pending, 'exercises', remote.id, remote.updated_at, local?.updatedAt)) continue
     await db.exercises.put({
-      id: remote.id, name: remote.name, muscleGroups: remote.muscle_groups, equipment: remote.equipment,
+      id: remote.id, catalogKey: remote.catalog_key ?? undefined, name: remote.name, muscleGroups: remote.muscle_groups, equipment: remote.equipment,
       exerciseType: remote.exercise_type, instructions: remote.instructions, isCustom: remote.is_custom,
       createdAt: remote.created_at, updatedAt: remote.updated_at, deletedAt: remote.deleted_at,
     })
@@ -70,6 +86,10 @@ async function pullRemoteData(userId: string) {
   const workoutExerciseResult = await supabase.from('workout_exercises').select('*').eq('user_id', userId)
   if (workoutExerciseResult.error) throw workoutExerciseResult.error
   for (const remote of workoutExerciseResult.data ?? []) {
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'workoutExercises', remote.id)) await db.workoutExercises.delete(remote.id)
+      continue
+    }
     const local = await db.workoutExercises.get(remote.id)
     if (!shouldApplyRemote(pending, 'workoutExercises', remote.id, remote.updated_at, local?.updatedAt)) continue
     await db.workoutExercises.put({
@@ -81,6 +101,10 @@ async function pullRemoteData(userId: string) {
   const workoutSetResult = await supabase.from('workout_sets').select('*').eq('user_id', userId)
   if (workoutSetResult.error) throw workoutSetResult.error
   for (const remote of workoutSetResult.data ?? []) {
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'workoutSets', remote.id)) await db.workoutSets.delete(remote.id)
+      continue
+    }
     const local = await db.workoutSets.get(remote.id)
     if (!shouldApplyRemote(pending, 'workoutSets', remote.id, remote.updated_at, local?.updatedAt)) continue
     await db.workoutSets.put({
@@ -93,11 +117,15 @@ async function pullRemoteData(userId: string) {
   const cardioResult = await supabase.from('cardio_entries').select('*').eq('user_id', userId)
   if (cardioResult.error) throw cardioResult.error
   for (const remote of cardioResult.data ?? []) {
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'cardioEntries', remote.id)) await db.cardioEntries.delete(remote.id)
+      continue
+    }
     const local = await db.cardioEntries.get(remote.id)
     if (!shouldApplyRemote(pending, 'cardioEntries', remote.id, remote.updated_at, local?.updatedAt)) continue
     await db.cardioEntries.put({
       id: remote.id, workoutId: remote.workout_id, activityType: remote.activity_type, durationSeconds: remote.duration_seconds,
-      distanceMeters: remote.distance_meters, inclinePercent: remote.incline_percent, heartRate: remote.heart_rate,
+      distanceMeters: remote.distance_meters, speedKph: remote.speed_kph ?? null, inclinePercent: remote.incline_percent, heartRate: remote.heart_rate,
       calories: remote.calories, notes: remote.notes, revision: remote.revision, updatedAt: remote.updated_at,
     })
   }
@@ -105,6 +133,10 @@ async function pullRemoteData(userId: string) {
   const measurementResult = await supabase.from('measurements').select('*').eq('user_id', userId)
   if (measurementResult.error) throw measurementResult.error
   for (const remote of measurementResult.data ?? []) {
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'measurements', remote.id)) await db.measurements.delete(remote.id)
+      continue
+    }
     const local = await db.measurements.get(remote.id)
     if (!shouldApplyRemote(pending, 'measurements', remote.id, remote.updated_at, local?.updatedAt)) continue
     await db.measurements.put({
@@ -116,6 +148,10 @@ async function pullRemoteData(userId: string) {
   const goalResult = await supabase.from('goals').select('*').eq('user_id', userId)
   if (goalResult.error) throw goalResult.error
   for (const remote of goalResult.data ?? []) {
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'goals', remote.id)) await db.goals.delete(remote.id)
+      continue
+    }
     const local = await db.goals.get(remote.id)
     if (!shouldApplyRemote(pending, 'goals', remote.id, remote.updated_at, local?.updatedAt)) continue
     await db.goals.put({
@@ -128,6 +164,10 @@ async function pullRemoteData(userId: string) {
   const recordResult = await supabase.from('personal_records').select('*').eq('user_id', userId)
   if (recordResult.error) throw recordResult.error
   for (const remote of recordResult.data ?? []) {
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'personalRecords', remote.id)) await db.personalRecords.delete(remote.id)
+      continue
+    }
     const local = await db.personalRecords.get(remote.id)
     if (!shouldApplyRemote(pending, 'personalRecords', remote.id, remote.updated_at, local?.updatedAt)) continue
     await db.personalRecords.put({
@@ -140,6 +180,10 @@ async function pullRemoteData(userId: string) {
   const photoResult = await supabase.from('progress_photos').select('*').eq('user_id', userId)
   if (photoResult.error) throw photoResult.error
   for (const remote of photoResult.data ?? []) {
+    if (remote.deleted_at) {
+      if (shouldApplyRemoteTombstone(pending, 'progressPhotos', remote.id)) await db.progressPhotos.delete(remote.id)
+      continue
+    }
     const local = await db.progressPhotos.get(remote.id)
     if (!shouldApplyRemote(pending, 'progressPhotos', remote.id, remote.updated_at, local?.updatedAt)) continue
     await db.progressPhotos.put({
@@ -203,12 +247,12 @@ export async function syncNow(): Promise<SyncResult> {
         })
         if (result.error) throw result.error
       } else if (item.entityType === 'cardioEntries') {
-        const cardio = payload as { workoutId: string; activityType: string; durationSeconds: number; distanceMeters: number | null; inclinePercent: number | null; heartRate: number | null; calories: number | null; notes: string }
-        const result = await supabase.from('cardio_entries').upsert({ id: item.entityId, user_id: userId, workout_id: cardio.workoutId, activity_type: cardio.activityType, duration_seconds: cardio.durationSeconds, distance_meters: cardio.distanceMeters, incline_percent: cardio.inclinePercent, heart_rate: cardio.heartRate, calories: cardio.calories, notes: cardio.notes, revision: item.revision, updated_at: new Date().toISOString() })
+        const cardio = payload as { workoutId: string; activityType: string; durationSeconds: number; distanceMeters: number | null; speedKph?: number | null; inclinePercent: number | null; heartRate: number | null; calories: number | null; notes: string }
+        const result = await supabase.from('cardio_entries').upsert({ id: item.entityId, user_id: userId, workout_id: cardio.workoutId, activity_type: cardio.activityType, duration_seconds: cardio.durationSeconds, distance_meters: cardio.distanceMeters, ...(cardio.speedKph !== undefined ? { speed_kph: cardio.speedKph } : {}), incline_percent: cardio.inclinePercent, heart_rate: cardio.heartRate, calories: cardio.calories, notes: cardio.notes, revision: item.revision, updated_at: new Date().toISOString() })
         if (result.error) throw result.error
       } else if (item.entityType === 'exercises') {
-        const exercise = payload as { name: string; muscleGroups: string[]; equipment: string; exerciseType: string; instructions: string; isCustom: boolean; createdAt: string; updatedAt: string; deletedAt: string | null }
-        const result = await supabase.from('exercises').upsert({ id: item.entityId, user_id: userId, name: exercise.name, muscle_groups: exercise.muscleGroups, equipment: exercise.equipment, exercise_type: exercise.exerciseType, instructions: exercise.instructions, is_custom: exercise.isCustom, revision: item.revision, created_at: exercise.createdAt, updated_at: new Date().toISOString(), deleted_at: exercise.deletedAt })
+        const exercise = payload as { catalogKey?: string; name: string; muscleGroups: string[]; equipment: string; exerciseType: string; instructions: string; isCustom: boolean; createdAt: string; updatedAt: string; deletedAt: string | null }
+        const result = await supabase.from('exercises').upsert({ id: item.entityId, user_id: userId, ...(exercise.catalogKey !== undefined ? { catalog_key: exercise.catalogKey } : {}), name: exercise.name, muscle_groups: exercise.muscleGroups, equipment: exercise.equipment, exercise_type: exercise.exerciseType, instructions: exercise.instructions, is_custom: exercise.isCustom, revision: item.revision, created_at: exercise.createdAt, updated_at: new Date().toISOString(), deleted_at: exercise.deletedAt })
         if (result.error) throw result.error
       } else if (item.entityType === 'workoutExercises') {
         const exercise = payload as { workoutId: string; name: string; muscleGroup: string; section: 'weight'|'core'; order: number }

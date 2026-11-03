@@ -132,29 +132,42 @@ h2 { font-size: 20px; }
 
 :root {
   color-scheme: light;
-  --ink: #17231d;
-  --muted: #69756e;
-  --line: #dce5dc;
-  --paper: #fffefa;
-  --green: #2e7154;
-  --green-dark: #20553e;
-  --lime: #d9eb7b;
+  --ink: #1d2923;
+  --muted: #6d7871;
+  --line: #dce3dc;
+  --paper: #ffffff;
+  --green: #326b50;
+  --green-dark: #224b38;
+  --lime: #f0b18d;
   font-family: "Aptos", "Segoe UI", sans-serif;
   letter-spacing: 0;
 }
 
 html, body, #root { width: 100%; min-width: 320px; min-height: 100%; margin: 0; }
 #root { max-width: none; border: 0; text-align: left; display: block; }
-body { min-height: 100vh; background: linear-gradient(145deg, #f8faf5 0%, #edf2eb 100%); }
+body { min-height: 100vh; background: linear-gradient(145deg, #f8faf7 0%, #eef2ed 100%); }
 h1, h2, h3 { font-family: "Aptos Display", "Trebuchet MS", sans-serif; letter-spacing: 0; }
 h1 { margin: 5px 0 0; font-size: 32px; }
-.app-shell { grid-template-columns: 190px minmax(0, 1fr); }
-.sidebar { padding: 18px 12px; overflow: hidden; }
-.nav-list { overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+.app-shell { grid-template-columns: 166px minmax(0, 1fr); }
+.sidebar { padding: 14px 9px; overflow: hidden; background: #233a30; }
+.brand { gap: 8px; padding: 0 6px 18px; font-size: 14px; }
+.brand-mark { width: 32px; height: 32px; border-radius: 8px; background: var(--lime); }
+.nav-list { gap: 2px; overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+.nav-button { min-height: 36px; padding: 7px 9px; gap: 8px; border-radius: 5px; font-size: 12px; }
+.nav-button.active { background: var(--lime); color: #29362f; }
+.online { padding: 10px 7px; font-size: 11px; }
 .content { width: 100%; }
+.topbar { background: rgba(255,255,255,.92); }
+.panel, .stat-card, .section-card, .exercise-card { box-shadow: 0 3px 12px rgba(34, 55, 43, .035); }
+.primary-button { background: var(--green); }
+.secondary-button:hover { background: #f2f6f1; border-color: #bfcfc1; }
+.danger-button { background: #fff1e9; border-color: #f1c7b1; color: #9c4c2b; }
+.section-tab.active { background: #edf4ee; }
+.check-button.done { background: var(--lime); border-color: var(--lime); }
 .page-heading h1 { overflow-wrap: anywhere; }
 .panel { min-width: 0; }
 .workout-layout > *, .dashboard-grid > * { min-width: 0; }
+.workout-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 560px; }
 .exercise-panel-header { align-items: end; gap: 12px; flex-wrap: wrap; }
 .exercise-panel-header h2 { margin: 0; }
 .exercise-add { display: grid; grid-template-columns: minmax(170px, 1fr) auto; align-items: end; gap: 8px; }
@@ -162,11 +175,21 @@ h1 { margin: 5px 0 0; font-size: 32px; }
 .logged-exercise { padding: 14px 0; border-top: 1px solid var(--line); }
 .logged-exercise-title { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .logged-exercise-title .danger-button { min-height: 36px; margin-left: auto; padding-inline: 10px; font-size: 12px; }
+.exercise-library-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.exercise-library-title h3 { font-size: 16px; overflow-wrap: anywhere; }
+.exercise-library-title .secondary-button { min-height: 36px; padding-inline: 10px; }
+.exercise-library-actions { display: flex; gap: 6px; }
+.exercise-library-actions .danger-button { min-height: 36px; padding-inline: 10px; font-size: 12px; }
 .past-workout-form { margin-bottom: 18px; }
+.plan-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.plan-day-row { display: grid; gap: 10px; align-content: start; padding: 14px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcf9; }
+.plan-day-row h2 { margin: 0; font-size: 16px; }
+.plan-day-row small { color: var(--muted); }
 .past-workout-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .past-focus { grid-column: span 2; }
 .past-exercise-list { display: grid; gap: 10px; margin-top: 18px; }
-.past-exercise-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) repeat(3, minmax(72px, .55fr)) auto; align-items: end; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: #f9faf6; }
+.past-exercise-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: #f9faf6; }
+.past-exercise-row > .danger-button { justify-self: start; }
 .past-form-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; }
 .status-message { margin: 0 0 12px; color: var(--green-dark); }
 .bottom-nav a { color: var(--muted); text-decoration: none; }
@@ -203,6 +226,7 @@ h1 { margin: 5px 0 0; font-size: 32px; }
   }
   .bottom-nav a.active { background: #eaf1e8; }
   .dashboard-grid, .workout-layout { grid-template-columns: minmax(0, 1fr); }
+  .workout-filters { max-width: none; }
   .rest-panel { position: static; }
   .exercise-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .exercise-row:has(> div:empty) { grid-template-columns: minmax(0, 1fr) minmax(76px, .7fr) 42px; }

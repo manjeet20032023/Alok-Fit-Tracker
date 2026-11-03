@@ -31,6 +31,7 @@ export async function exportJSON() {
     exercises: await db.exercises.toArray(),
     measurements: await db.measurements.toArray(),
     goals: await db.goals.toArray(),
+    planDays: await db.planDays.toArray(),
     personalRecords: await db.personalRecords.toArray(),
     progressPhotos: await Promise.all(photos.map(async ({ blob, ...photo }) => ({ ...photo, dataUrl: await blobToDataUrl(blob) }))),
   }
