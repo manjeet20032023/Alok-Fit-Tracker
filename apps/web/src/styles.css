@@ -181,6 +181,28 @@ h1 { margin: 5px 0 0; font-size: 32px; }
 .exercise-library-actions { display: flex; gap: 6px; }
 .exercise-library-actions .danger-button { min-height: 36px; padding-inline: 10px; font-size: 12px; }
 .past-workout-form { margin-bottom: 18px; }
+.past-notes { grid-column: span 2; }
+.history-edit-sets { display: grid; gap: 7px; grid-column: 1 / -1; min-width: 0; }
+.history-edit-set { display: grid; grid-template-columns: auto repeat(2, minmax(100px, 150px)) auto; align-items: end; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.history-edit-set > strong { padding-bottom: 10px; white-space: nowrap; }
+.history-edit-set .danger-button { min-height: 38px; padding-inline: 10px; font-size: 12px; }
+.history-days { display: grid; gap: 16px; }
+.history-day { padding: 14px 0; border-top: 1px solid var(--line); }
+.history-day:first-child { border-top: 0; padding-top: 0; }
+.history-day-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.history-day-header h2 { margin: 3px 0; font-size: 19px; }
+.history-day-header p { color: var(--muted); font-size: 13px; }
+.history-day-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.history-day-stats { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; padding: 8px 0; border-block: 1px solid var(--line); }
+.history-exercise-list { display: grid; gap: 8px; padding-top: 10px; }
+.history-exercise { display: grid; grid-template-columns: minmax(120px, .7fr) auto minmax(0, 1.8fr); gap: 8px; align-items: start; }
+.history-set-list { display: flex; gap: 8px 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.previous-workout-reference { margin: 12px 0; padding: 15px; border-left: 3px solid var(--lime); }
+.previous-workout-reference > p { color: var(--muted); font-size: 13px; }
+.comparison-group { display: grid; gap: 7px; padding: 10px 0; border-top: 1px solid var(--line); }
+.comparison-heading, .comparison-exercise { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.comparison-heading span, .comparison-exercise span, .comparison-group small { color: var(--muted); font-size: 12px; }
+.latest-exercise-row { display: grid; grid-template-columns: minmax(120px, .7fr) auto minmax(0, 1.8fr); gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); }
 .plan-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
 .plan-day-row { display: grid; gap: 10px; align-content: start; padding: 14px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcf9; }
 .plan-day-row h2 { margin: 0; font-size: 16px; }
@@ -235,6 +257,11 @@ h1 { margin: 5px 0 0; font-size: 32px; }
   .past-focus { grid-column: span 2; }
   .past-exercise-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .past-exercise-row .danger-button { min-height: 40px; }
+  .history-day-header { flex-direction: column; }
+  .history-day-actions { width: 100%; }
+  .history-day-actions button { flex: 1; }
+  .history-exercise, .latest-exercise-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .history-set-list { grid-column: 1 / -1; }
 }
 
 @media (max-width: 540px) {
@@ -263,4 +290,6 @@ h1 { margin: 5px 0 0; font-size: 32px; }
   .past-exercise-row { padding: 10px; gap: 8px; }
   .past-form-actions { flex-direction: column; }
   .past-form-actions button { width: 100%; }
+  .history-edit-set { grid-template-columns: 1fr 1fr; }
+  .history-edit-set > strong { grid-column: 1 / -1; padding-bottom: 0; }
 }
